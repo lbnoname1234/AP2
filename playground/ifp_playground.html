@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IFP // Interstellar Functional Program — Playground</title>
+    <link rel="stylesheet" href="../playgr_design/playground.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <div class="eyebrow">
+          <span class="dot"></span>signal locked · call-by-name evaluator
+        </div>
+        <h1>Interstellar <span class="accent">Functional</span> Program</h1>
+        <p class="hero-sub">
+          A tiny lambda calculus transmitted as base-94 tokens. Type an encoded
+          program, or load a signal from the archive below — the decoder shows
+          you the parsed structure and the exact number of beta-reduction steps
+          it took to resolve. Built on top of <code>parser.py</code> /
+          <code>interpreter.py</code> / <code>printer.py</code>.
+        </p>
+      </header>
+
+      <div class="grid">
+        <!-- Input column -->
+        <div>
+          <div class="panel">
+            <p class="panel-title">Encoded transmission</p>
+            <textarea id="program" spellcheck="false"></textarea>
+            <div class="controls-row">
+              <button id="run" type="button">Run ▸</button>
+              <label class="toggle">
+                <input type="checkbox" id="enforceLimit" checked />
+                enforce step limit
+              </label>
+              <label class="toggle">
+                max steps
+                <input type="text" id="maxSteps" value="10000000" />
+              </label>
+            </div>
+            <p class="hint">
+              Press <kbd>Ctrl/Cmd</kbd>+<kbd>Enter</kbd> to run.
+            </p>
+          </div>
+
+          <div class="examples-section">
+            <p class="panel-title">Archived signals</p>
+            <div class="chip-row" id="examples"></div>
+          </div>
+        </div>
+
+        <!-- Output column -->
+        <div>
+          <div class="panel">
+            <p class="panel-title">Decoded result</p>
+
+            <div id="resultPanel">
+              <div class="result-line">
+                <span class="result-label">Human</span>
+                <span class="result-value" id="resultHuman"></span>
+              </div>
+              <div class="result-line">
+                <span class="result-label">Encoded term</span>
+                <span class="result-value" id="resultEncoded"></span>
+              </div>
+              <div class="result-line">
+                <span class="result-label">Beta-reduction steps</span>
+                <span class="result-value steps" id="resultSteps"></span>
+              </div>
+            </div>
+
+            <div id="errorPanel" class="error-panel hidden">
+              <div id="errorText"></div>
+            </div>
+          </div>
+
+          <div class="panel" style="margin-top: 20px">
+            <p class="panel-title">Parsed structure (AST)</p>
+            <div id="astPanel"></div>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        IFP Playground — a compact browser-based interpreter for the
+        Interstellar Functional Program language. Parser, interpreter, and
+        printer logic are implemented here to mirror the reference
+        implementation and to demonstrate the evaluation flow clearly.
+      </footer>
+    </div>
+
+    <script src="ifp_core.js"></script>
+    <script src="ifp_examples.js"></script>
+    <script>
+      // UI logic for the IFP playground. Depends on ifp_core.js being loaded
+      // first (pTerm, ppTerm, interpret, ParseError, InterpreterError, etc. are
+      // expected to be in scope).
+
+      const els = {};
+      [
+        "program",
+        "run",
+        "examples",
+        "resultPanel",
+        "resultHuman",
+        "resultEncoded",
+        "resultSteps",
+        "errorPanel",
+        "errorText",
+        "astPanel",
+        "astToggle",
+        "maxSteps",
+        "enforceLimit",
+      ].forEach((id) => (els[id] = document.getElementById(id)));
+
+      function renderExamples() {
+        els.examples.innerHTML = "";
+        EXAMPLES.forEach((ex) => {
+          const btn = document.createElement("button");
+          btn.className = "chip";
+          btn.type = "button";
+          btn.textContent = ex.label;
+          btn.title = ex.note;
+          btn.addEventListener("click", () => {
+            els.program.value = ex.program;
+            runProgram();
+          });
+          els.examples.appendChild(btn);
+        });
+      }
+
+      function nodeLabel(term) {
+        switch (term.kind) {
+          case "Int":
+            return `Int ${term.value}`;
+          case "Bool":
+            return `Bool ${term.value}`;
+          case "String":
+            return `String ${JSON.stringify(term.value)}`;
+          case "Var":
+            return `Var v${term.value}`;
+          case "Lam":
+            return `Lam v${term.var} ->`;
+          case "UnOp":
+            return `UnOp '${term.op}'`;
+          case "BinOp":
+            return `BinOp '${term.op}'`;
+          case "If":
+            return "If";
+          default:
+            return term.kind;
+        }
+      }
+
+      function nodeClass(term) {
+        if (["Int", "Bool", "String"].includes(term.kind)) return "ast-leaf";
+        if (["Var", "Lam"].includes(term.kind)) return "ast-binder";
+        return "ast-op";
+      }
+
+      function children(term) {
+        switch (term.kind) {
+          case "Lam":
+            return [["body", term.body]];
+          case "UnOp":
+            return [["term", term.term]];
+          case "BinOp":
+            return [
+              ["left", term.left],
+              ["right", term.right],
+            ];
+          case "If":
+            return [
+              ["cond", term.cond],
+              ["true", term.true_branch],
+              ["false", term.false_branch],
+            ];
+          default:
+            return [];
+        }
+      }
+
+      function buildAstNode(term) {
+        const li = document.createElement("li");
+        const label = document.createElement("span");
+        label.className = "ast-label " + nodeClass(term);
+        label.textContent = nodeLabel(term);
+        li.appendChild(label);
+
+        const kids = children(term);
+        if (kids.length > 0) {
+          const ul = document.createElement("ul");
+          kids.forEach(([role, child]) => {
+            const wrapper = document.createElement("li");
+            const roleTag = document.createElement("span");
+            roleTag.className = "ast-role";
+            roleTag.textContent = role + ":";
+            wrapper.appendChild(roleTag);
+            const innerUl = document.createElement("ul");
+            innerUl.appendChild(buildAstNode(child));
+            wrapper.appendChild(innerUl);
+            ul.appendChild(wrapper);
+          });
+          li.appendChild(ul);
+        }
+        return li;
+      }
+
+      function renderAst(term) {
+        els.astPanel.innerHTML = "";
+        const root = document.createElement("ul");
+        root.className = "ast-tree";
+        root.appendChild(buildAstNode(term));
+        els.astPanel.appendChild(root);
+      }
+
+      function renderValue(term) {
+        if (term.kind === "Int") return term.value.toString();
+        if (term.kind === "Bool") return term.value ? "true" : "false";
+        if (term.kind === "String") return term.value;
+        return ppTerm(term);
+      }
+
+      const prefersReducedMotion =
+        window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      function decodeReveal(el, finalText) {
+        if (prefersReducedMotion || finalText.length === 0) {
+          el.textContent = finalText;
+          return;
+        }
+        const noiseChars = "!#$%&()*+,-./:;<=>?@[\\]^_`|~";
+        const duration = Math.min(500, 60 + finalText.length * 12);
+        const start = performance.now();
+
+        function frame(now) {
+          const t = Math.min(1, (now - start) / duration);
+          let out = "";
+          for (let i = 0; i < finalText.length; i++) {
+            const charProgress = t * finalText.length - i;
+            if (charProgress >= 1) {
+              out += finalText[i];
+            } else if (charProgress > 0) {
+              out += noiseChars[Math.floor(Math.random() * noiseChars.length)];
+            } else {
+              out += " ";
+            }
+          }
+          el.textContent = out;
+          if (t < 1) requestAnimationFrame(frame);
+          else el.textContent = finalText;
+        }
+        requestAnimationFrame(frame);
+      }
+
+      function showError(message) {
+        els.resultPanel.classList.add("hidden");
+        els.astPanel.parentElement.classList.add("hidden");
+        els.errorPanel.classList.remove("hidden");
+        els.errorText.textContent = message;
+      }
+
+      function showResult(resultTerm, steps) {
+        els.errorPanel.classList.add("hidden");
+        els.resultPanel.classList.remove("hidden");
+        els.astPanel.parentElement.classList.remove("hidden");
+
+        decodeReveal(els.resultHuman, renderValue(resultTerm));
+        els.resultEncoded.textContent = ppTerm(resultTerm);
+        els.resultSteps.textContent = steps.toLocaleString("en-US");
+      }
+
+      function runProgram() {
+        const program = els.program.value;
+        const maxSteps = parseInt(els.maxSteps.value, 10) || 10000000;
+        const enforce = els.enforceLimit.checked;
+
+        let term;
+        try {
+          term = pTerm(program);
+        } catch (e) {
+          if (e instanceof ParseError) {
+            showError(`Parse error: ${e.message}`);
+            return;
+          }
+          showError(`Unexpected error: ${e.message}`);
+          return;
+        }
+
+        renderAst(term);
+
+        try {
+          const { result, steps } = interpret(enforce, term, maxSteps);
+          showResult(result, steps);
+        } catch (e) {
+          if (e instanceof InterpreterError) {
+            showError(
+              `Interpreter error (${e.constructor.name}): ${e.message}`,
+            );
+            return;
+          }
+          if (e instanceof RangeError) {
+            showError(
+              "Ran out of browser call stack before hitting the step limit.\n\n" +
+                "This evaluator uses non-memoized call-by-name (to match the spec's " +
+                "exact reduction-step counts), so deep recursion needs real stack " +
+                "depth. The Python reference implementation works around this by " +
+                "running in a worker thread with a larger stack; a browser tab's " +
+                "call stack is fixed and can't be resized. Try a shallower example, " +
+                "or a smaller 'max steps' value.",
+            );
+            return;
+          }
+          showError(`Unexpected error: ${e.message}`);
+        }
+      }
+
+      els.run.addEventListener("click", runProgram);
+      els.program.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runProgram();
+      });
+
+      renderExamples();
+      els.program.value = EXAMPLES[0].program;
+      runProgram();
+    </script>
+  </body>
+</html>
