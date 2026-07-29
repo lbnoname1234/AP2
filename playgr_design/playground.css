@@ -1,15 +1,14 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
       :root {
-        --bg-deep: #14121f;
-        --bg-panel: #1e1b2e;
-        --bg-panel-raised: #262238;
-        --border: #363050;
+        --bg-deep: pink;
+        --bg-panel: #f697eb;
+        --bg-panel-raised: #b08af1;
+        --border: #f90798;
         --text-primary: #ede9f5;
-        --text-dim: #8a84a8;
-        --accent-signal: #e8a33d;
-        --accent-signal-dim: #7a5a28;
-        --accent-cool: #6fd7c5;
+        --text-dim: #f84bb9;
+        --accent-signal: #ff0090;
+        --accent-signal-dim: #28dfe2;
         --accent-error: #e85d5d;
         --font-display: "Space Grotesk", sans-serif;
         --font-body: "Inter", sans-serif;
@@ -44,7 +43,7 @@
       }
 
       a {
-        color: var(--accent-cool);
+        color: var(--text-primary);
       }
 
       .wrap {
@@ -116,8 +115,9 @@
         background: var(--bg-panel-raised);
         padding: 1px 6px;
         border-radius: 4px;
-        color: var(--accent-cool);
+        color: var(--text-primary);
         font-size: 0.9em;
+        font-weight: bold;
       }
 
       /* ---------- Layout ---------- */
@@ -161,8 +161,9 @@
         min-height: 130px;
         background: var(--bg-deep);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: 8px; 
         color: var(--text-primary);
+        font-weight: bold;
         font-family: var(--font-mono);
         font-size: 13.5px;
         line-height: 1.6;
@@ -227,6 +228,7 @@
         color: var(--text-primary);
         font-family: var(--font-mono);
         font-size: 12px;
+        font-weight: bold;
         padding: 4px 7px;
       }
 
@@ -237,6 +239,7 @@
         margin-top: 8px;
       }
       .hint kbd {
+        color: var(--text-primary);
         background: var(--bg-panel-raised);
         border: 1px solid var(--border);
         border-radius: 3px;
@@ -271,8 +274,8 @@
       }
 
       .chip:hover {
-        border-color: var(--accent-cool);
-        color: var(--accent-cool);
+        border-color: var(--text-primary);
+        color: var(--text-primary);
       }
 
       /* ---------- Output column ---------- */
@@ -301,9 +304,10 @@
       .result-value {
         font-family: var(--font-mono);
         font-size: 15px;
-        color: var(--accent-cool);
+        color: var(--text-primary);
         text-align: right;
         word-break: break-all;
+        font-weight: bold;
       }
 
       .result-value.steps {
@@ -352,7 +356,7 @@
       }
       .ast-leaf {
         background: rgba(111, 215, 197, 0.12);
-        color: var(--accent-cool);
+        color: var(--text-primary);
       }
       .ast-binder {
         background: rgba(232, 163, 61, 0.14);
